@@ -10,7 +10,7 @@ namespace HiddenLasers
         public override string Name => "HiddenLasers";
         public override string Author => "hazre";
         public override string Version => "1.0.0";
-        public override string Link => "https://github.com/hazre/HiddenLasers/";
+        public override string Link => "https://github.com/hazre/HiddenLasers";
 
         public static ModConfiguration config;
 
