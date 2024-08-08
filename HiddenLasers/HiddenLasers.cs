@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using FrooxEngine;
 using HarmonyLib;
 using ResoniteModLoader;
@@ -9,7 +10,7 @@ namespace HiddenLasers
     {
         public override string Name => "HiddenLasers";
         public override string Author => "hazre";
-        public override string Version => "1.0.0";
+        public override string Version => "1.1.0";
         public override string Link => "https://github.com/hazre/HiddenLasers";
 
         public static ModConfiguration config;
@@ -18,7 +19,7 @@ namespace HiddenLasers
         [AutoRegisterConfigKey] private static ModConfigurationKey<bool> ENABLED_DESKTOP = new ModConfigurationKey<bool>("Should the laser be shown in Desktop Mode?", "", () => false);
         [AutoRegisterConfigKey] private static ModConfigurationKey<bool> ENABLED_USERSPACE = new ModConfigurationKey<bool>("Should the laser be shown in Userspace?", "", () => true);
 
-        public static List<InteractionLaser> lasers = new List<InteractionLaser>();
+        public static Dictionary<InteractionLaser, FieldDrive<bool>> instances = new();
 
         public override void OnEngineInit()
         {
@@ -30,60 +31,60 @@ namespace HiddenLasers
 
             config.OnThisConfigurationChanged += (_) =>
             {
-                foreach (var instance in lasers)
+                foreach (var instance in instances.Keys)
                 {
-                    if (instance != null)
-                    {
-                        UpdateLaser(instance);
-                    }
+                    UpdateLaser(instance, instances[instance]);
                 }
             };
         }
 
-        public static void UpdateLaser(InteractionLaser __instance)
+        private static void UpdateLaser(InteractionLaser instance, FieldDrive<bool> laserVisible)
         {
-            var laserVisible = config.GetValue(LASER_VISIBLE);
-            if (__instance.Slot.World.IsUserspace()) laserVisible = config.GetValue(ENABLED_USERSPACE);
-            if (!__instance.Slot.ActiveUserRoot.ActiveUser.VR_Active) laserVisible = config.GetValue(ENABLED_DESKTOP);
-            var laser = __instance.Slot.GetComponent<MeshRenderer>().Mesh;
-            var directCursor = __instance.Slot.FindChild("DirectCursor");
+            if (instance == null || laserVisible == null) return;
 
-            laser.Component.Enabled = laserVisible;
-            directCursor.ActiveSelf_Field.Value = laserVisible;
-        }
+            MeshRenderer meshRenderer = null;
+            bool theBool = config.GetValue(LASER_VISIBLE);
+            if (instance.Slot.World.IsUserspace()) theBool = config.GetValue(ENABLED_USERSPACE);
+            if (!instance.Slot.ActiveUserRoot.ActiveUser.VR_Active) theBool = config.GetValue(ENABLED_DESKTOP);
 
-        public static void ForceLinkTemp(InteractionLaser __instance, FieldDrive<bool> ____laserVisible, FieldDrive<bool> ____directCursorVisible)
-        {
-            var temp = __instance.Slot.AttachComponent<ValueField<bool>>();
-            var temp2 = __instance.Slot.AttachComponent<ValueField<bool>>();
-            ____laserVisible.ForceLink(temp.Value);
-            ____directCursorVisible.ForceLink(temp2.Value);
+            instance.RunInUpdates(3, () =>
+            {
+                meshRenderer = instance.Slot.GetComponent<MeshRenderer>();
+
+                if (theBool)
+                {
+                    var valField = instance.Slot.GetComponent<ValueField<bool>>() ?? instance.Slot.AttachComponent<ValueField<bool>>();
+                    laserVisible.Target = valField.Value;
+                    meshRenderer.Enabled = false;
+                }
+                else
+                {
+                    laserVisible.Target = meshRenderer.EnabledField;
+                }
+            });
         }
 
         [HarmonyPatch(typeof(InteractionLaser))]
         class PatchInteractionLaser
         {
             [HarmonyPostfix]
-            [HarmonyPatch("OnAttach")]
-            static void OnAttach(InteractionLaser __instance, FieldDrive<bool> ____laserVisible, FieldDrive<bool> ____directCursorVisible)
+            [HarmonyPatch("OnAwake")]
+            static void Postfix(InteractionLaser __instance, FieldDrive<bool> ____laserVisible)
             {
                 if (__instance.Slot.ActiveUserRoot.ActiveUser != __instance.LocalUser)
                     return;
 
-                ForceLinkTemp(__instance, ____laserVisible, ____directCursorVisible);
-                UpdateLaser(__instance);
+                __instance.RunInUpdates(3, () =>
+                {
+                    instances = instances.Where(kvp => kvp.Key != null && kvp.Value != null).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
-                lasers.RemoveAll(instance => instance == null);
-                if (!lasers.Contains(__instance)) lasers.Add(__instance);
+                    if (!instances.TryGetValue(__instance, out _)) instances.Add(__instance, ____laserVisible);
+
+                    if (__instance.Slot.GetComponent<ValueField<bool>>() == null) __instance.Slot.AttachComponent<ValueField<bool>>();
+
+                    UpdateLaser(__instance, ____laserVisible);
+                });
             }
-        }
-    }
-    [HarmonyPatch(typeof(ConnectorManager), "ThreadCheck")]
-    public class DisableThreadCheck
-    {
-        public static bool Prefix()
-        {
-            return false;
         }
     }
 }
