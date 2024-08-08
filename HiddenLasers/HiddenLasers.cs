@@ -9,7 +9,7 @@ namespace HiddenLasers
     public class Patch : ResoniteMod
     {
         public override string Name => "HiddenLasers";
-        public override string Author => "hazre";
+        public override string Author => "hazre, NepuShiro";
         public override string Version => "1.1.0";
         public override string Link => "https://github.com/hazre/HiddenLasers";
 
@@ -26,7 +26,7 @@ namespace HiddenLasers
             config = GetConfiguration();
             config.Save(true);
 
-            Harmony harmony = new Harmony("me.hazre.HiddenLasers");
+            Harmony harmony = new Harmony("dev.hazre.HiddenLasers");
             harmony.PatchAll();
 
             config.OnThisConfigurationChanged += (_) =>
